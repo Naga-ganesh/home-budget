@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1b2a6b"><meta name="mobile-web-app-capable" content="yes">
+<title>Home Budget</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f8fb;--tx:#16203f;--mut:#667089;--ink:#1b2a6b;--on:#fff;--rule:#d9dde8;--bad:#b4341c;--ok:#1f7a4d}
+@media(prefers-color-scheme:dark){:root{--bg:#10142a;--tx:#e8ebf7;--mut:#8f98b8;--ink:#9fb0ff;--on:#10142a;--rule:#2a3157;--bad:#ff8b6b;--ok:#5fd39a}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:520px;margin:0 auto;padding:16px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mut{color:var(--mut);font-size:14px}.bad{color:var(--bad)}
+button{font:inherit;border:0;border-radius:8px;padding:12px 16px;background:var(--ink);color:var(--on);font-weight:600}
+button.ghost{background:none;color:var(--ink);padding:8px}button:disabled{opacity:.5}
+input,select{font:inherit;width:100%;padding:12px;border:1px solid var(--rule);border-radius:8px;background:transparent;color:var(--tx);margin:6px 0}
+.big{font:700 40px/1.1 Georgia,serif;margin:14px 0 6px;color:var(--ink)}.big small{font:14px system-ui;color:var(--mut)}
+.pills{display:flex;gap:8px;margin-bottom:12px}.pills span{border:1px solid var(--rule);border-radius:99px;padding:4px 12px;font-size:14px}
+nav{display:flex;border-bottom:2px solid var(--rule);margin-bottom:4px}
+nav button{flex:1;background:none;color:var(--mut);border-radius:0;padding:10px;text-transform:capitalize;border-bottom:3px solid transparent;margin-bottom:-2px}
+nav button.on{color:var(--ink);border-color:var(--ink)}
+.it{padding:12px 0;border-bottom:1px solid var(--rule);cursor:pointer}
+.it .name{font-weight:600}.it .left{font:600 18px Georgia,serif}
+.bar{height:3px;background:var(--rule);margin-top:8px}.bar i{display:block;height:100%;background:var(--ink)}.bar i.bad{background:var(--bad)}
+.tag{font-size:12px;color:var(--mut);border:1px solid var(--rule);border-radius:4px;padding:0 6px;margin-left:8px;font-weight:400}
+#sheet{position:fixed;inset:0;background:rgba(10,14,40,.5);z-index:5}
+#sh{position:absolute;left:0;right:0;bottom:0;background:var(--bg);padding:20px 16px calc(20px + env(safe-area-inset-bottom));border-radius:16px 16px 0 0;max-width:520px;margin:0 auto}
+#sh h3{margin:0}#sh .row button{flex:1}
+.erow{display:grid;grid-template-columns:1fr 84px 76px 36px;gap:6px;align-items:center}.erow input,.erow select{margin:3px 0;padding:10px 8px}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--on);padding:10px 16px;border-radius:99px;z-index:9}
+h3.s{margin:22px 0 6px}
+</style></head><body><main>
+<section id="login" hidden>
+  <div class="big" style="margin-top:60px">Home budget</div>
+  <p class="mut">Sign in with your name and PIN.</p>
+  <input id="u" placeholder="Username" autocapitalize="none" autocomplete="username">
+  <input id="p" type="password" inputmode="numeric" placeholder="PIN" autocomplete="current-password" onkeydown="event.key=='Enter'&&login()">
+  <p id="err" class="bad"></p><button onclick="login()" style="width:100%">Sign in</button>
+</section>
+<section id="app" hidden><div id="top"></div><nav id="tabs"></nav><div id="view"></div></section>
+</main>
+<div id="sheet" hidden onclick="if(event.target===this)closeS()"><div id="sh"></div></div>
+<div id="toast" hidden></div>
+<script>
+const API='PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const f=n=>'₹'+Number(n).toLocaleString('en-IN');
+let S=Object.assign({tab:'items',items:[],recent:[]},JSON.parse(localStorage.getItem('hb')||'{}'));
+async function api(action,d={}){
+  const r=await fetch(API,{method:'POST',body:JSON.stringify({action,token:S.token,...d})});
+  const j=await r.json();
+  if(j.error==='AUTH'){logout();throw new Error('Session expired. Sign in again.')}
+  if(j.error)throw new Error(j.error);return j}
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2200)}
+function upd(j){Object.assign(S,{items:j.items,recent:j.recent,month:j.month,role:j.role});draw()}
+async function load(){try{upd(await api('state'))}catch(e){toast(e.message)}}
+async function login(){$('#err').textContent='';try{const j=await api('login',{username:$('#u').value,pin:$('#p').value});
+  Object.assign(S,{token:j.token,user:j.user,role:j.role});localStorage.setItem('hb',JSON.stringify({token:S.token,user:S.user,role:S.role}));await load()}catch(e){$('#err').textContent=e.message}}
+function logout(){localStorage.removeItem('hb');S={tab:'items',items:[],recent:[]};draw()}
+function tab(t){S.tab=t;draw()}
+function draw(){
+  if(!S.token){$('#login').hidden=false;$('#app').hidden=true;return}
+  $('#login').hidden=true;$('#app').hidden=false;
+  const tot=S.items.reduce((a,i)=>a+i.budget,0),sp=S.items.reduce((a,i)=>a+i.spent,0);
+  const left=m=>S.items.filter(i=>i.mode===m).reduce((a,i)=>a+i.budget-i.spent,0);
+  $('#top').innerHTML=`<div class=row><span class=mut>${esc(S.user)} · ${S.month||''}</span><button class=ghost onclick=logout()>Log out</button></div>
+  <div class=big>${f(tot-sp)} <small>left of ${f(tot)}</small></div>
+  <div class=pills><span>GPay ${f(left('GPay'))}</span><span>Cash ${f(left('Cash'))}</span></div>`;
+  $('#tabs').innerHTML=['items','recent',...(S.role==='admin'?['admin']:[])].map(t=>`<button class="${S.tab===t?'on':''}" onclick="tab('${t}')">${t}</button>`).join('');
+  ({items:vItems,recent:vRecent,admin:vAdmin})[S.tab]()}
+function vItems(){$('#view').innerHTML=S.items.map((i,x)=>{const l=i.budget-i.spent,p=Math.min(100,i.budget?i.spent/i.budget*100:0);
+  return `<div class=it onclick="pick(${x})"><div class=row><span class=name>${esc(i.item)}<span class=tag>${i.mode}</span></span><span class="left ${l<0?'bad':''}">${f(l)}</span></div>
+  <div class="row mut"><span>${f(i.spent)} of ${f(i.budget)}</span><span>${l<0?'over budget':'left'}</span></div><div class=bar><i class="${l<0?'bad':''}" style="width:${p}%"></i></div></div>`}).join('')}
+function pick(x){const i=S.sel=S.items[x];$('#sheet').hidden=false;
+  $('#sh').innerHTML=`<h3>${esc(i.item)}</h3><div class=mut>${f(i.budget-i.spent)} left</div>
+  <input id=amt type=number inputmode=decimal placeholder="Amount in ₹" oninput=pv()><input id=note placeholder="Note (optional)" maxlength=60>
+  <div id=pvw class=mut>&nbsp;</div><div class=row><button class=ghost onclick=closeS()>Cancel</button><button id=addb onclick=addExp()>Add expense</button></div>`;$('#amt').focus()}
+function pv(){const a=+$('#amt').value||0;$('#pvw').textContent=a?'Left after this: '+f(S.sel.budget-S.sel.spent-a):'\u00a0'}
+function closeS(){$('#sheet').hidden=true}
+async function addExp(){const a=+$('#amt').value;if(!(a>0))return toast('Enter an amount');$('#addb').disabled=true;
+  try{upd(await api('add',{item:S.sel.item,amount:a,note:$('#note').value}));closeS();toast('Expense added')}catch(e){toast(e.message);$('#addb').disabled=false}}
+function vRecent(){$('#view').innerHTML=S.recent.map(r=>`<div class=it style="cursor:default"><div class=row><b>${esc(r.item)}</b><b>${f(r.amount)}</b></div>
+  <div class=row><span class=mut>${esc(r.user)} · ${esc(r.time)}${r.note?' · '+esc(r.note):''}</span>${r.user===S.user||S.role==='admin'?`<button class=ghost onclick="del('${r.id}')">Delete</button>`:''}</div></div>`).join('')||'<p class=mut>No expenses yet this month.</p>'}
+async function del(id){if(!confirm('Delete this expense?'))return;try{upd(await api('del',{id}))}catch(e){toast(e.message)}}
+async function vAdmin(){
+  S.draft=S.draft||S.items.map(i=>({item:i.item,budget:i.budget,mode:i.mode}));
+  let us=[];try{us=(await api('users')).users}catch(e){}
+  const tot=S.draft.reduce((a,d)=>a+(+d.budget||0),0);
+  $('#view').innerHTML=`<h3 class=s>Monthly budgets · ${f(tot)}</h3>`+S.draft.map((d,x)=>`<div class=erow><input value="${esc(d.item)}" onchange="S.draft[${x}].item=this.value">
+  <input type=number inputmode=numeric value="${d.budget}" onchange="S.draft[${x}].budget=+this.value;vAdmin()"><select onchange="S.draft[${x}].mode=this.value"><option${d.mode=='GPay'?' selected':''}>GPay<option${d.mode=='Cash'?' selected':''}>Cash</select>
+  <button class=ghost onclick="S.draft.splice(${x},1);vAdmin()">✕</button></div>`).join('')+
+  `<p class=mut>Renaming an item detaches this month's earlier expenses from it.</p><div class=row><button class=ghost onclick="S.draft.push({item:'',budget:0,mode:'GPay'});vAdmin()">+ Add item</button><button onclick=saveB()>Save budgets</button></div>
+  <h3 class=s>Family</h3>`+us.map(u=>`<div class=row style="padding:6px 0"><span>${esc(u.username)} <span class=tag>${u.role}</span></span><span><button class=ghost onclick="setU('${u.username}','${u.role}')">Set PIN</button>${u.username===S.user?'':`<button class=ghost onclick="rmU('${u.username}')">Remove</button>`}</span></div>`).join('')+
+  `<div class=erow style="grid-template-columns:1fr 80px 90px"><input id=nu placeholder="New username"><input id=np inputmode=numeric placeholder="PIN"><select id=nr><option>member<option>admin</select></div><button onclick=addU() style="width:100%;margin-top:6px">Add user</button>`}
+async function saveB(){try{await api('saveBudgets',{items:S.draft});S.draft=null;await load();toast('Budgets saved')}catch(e){toast(e.message)}}
+async function setU(u,role){const pin=prompt('New PIN (4-6 digits) for '+u);if(!pin)return;try{await api('setUser',{username:u,pin,role});toast('PIN updated')}catch(e){toast(e.message)}}
+async function addU(){try{await api('setUser',{username:$('#nu').value,pin:$('#np').value,role:$('#nr').value});vAdmin()}catch(e){toast(e.message)}}
+async function rmU(u){if(!confirm('Remove '+u+'?'))return;try{await api('delUser',{username:u});vAdmin()}catch(e){toast(e.message)}}
+draw();if(S.token)load();
+</script></body></html>
