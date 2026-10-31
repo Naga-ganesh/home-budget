@@ -89,9 +89,9 @@ function vDash(){
   <div class=panel><h4>Running low</h4>${watch.map(i=>{const l=i.budget-i.spent;return `<div class=row style="padding:3px 0"><span>${esc(i.item)}</span><span class="${l<0?'bad':''}">${l<0?'over by '+f(-l):f(l)+' left'}</span></div>`}).join('')||'<span class=mut>No item is near its limit.</span>'}</div>
   <div class=panel><h4>Daily spending</h4><div class=days>${Array.from({length:day},(_,k)=>{const v=dl[k+1]||0;return `<i style="height:${mx?v/mx*100:0}%"></i>`}).join('')}</div><div class="row mut"><span>Day 1</span><span>Highest day ${f(mx)}</span><span>Day ${day}</span></div></div>
   <div class=panel><h4>Who spent what</h4>${us.map(([u,v])=>`<div class=row><span>${esc(u)}</span><span class=mut>${f(v)}${sp?' ('+Math.round(v/sp*100)+'%)':''}</span></div>${bar(v,sp)}`).join('')||'<span class=mut>No spending yet this month.</span>'}</div>`}
-function vItems(){$('#view').innerHTML=S.items.map((i,x)=>{const l=i.budget-i.spent,p=Math.min(100,i.budget?i.spent/i.budget*100:0);
+function vItems(){$('#view').innerHTML=S.items.map((i,x)=>{const l=i.budget-i.spent,p=Math.min(100,i.budget?i.spent/i.budget*100:0),u=i.budget?Math.round(i.spent/i.budget*100):0,pc=i.spent>0&&u===0?'&lt;1':u;
   return `<div class=it onclick="pick(${x})"><div class=row><span class=name>${esc(i.item)}<span class=tag>${i.mode}</span></span><span class="left ${l<0?'bad':''}">${f(l)}</span></div>
-  <div class="row mut"><span>${f(i.spent)} of ${f(i.budget)}</span><span>${l<0?'over budget':'left'}</span></div><div class=bar><i class="${l<0?'bad':''}" style="width:${p}%"></i></div></div>`}).join('')}
+  <div class="row mut"><span>${f(i.spent)} of ${f(i.budget)} (${pc}%)</span><span>${l<0?'over budget':'left'}</span></div><div class=bar><i class="${l<0?'bad':''}" style="width:${p}%"></i></div></div>`}).join('')}
 function pick(x){const i=S.sel=S.items[x];$('#sheet').hidden=false;
   $('#sh').innerHTML=`<h3>${esc(i.item)}</h3><div class=mut>${f(i.budget-i.spent)} left</div>
   <input id=amt type=number inputmode=decimal placeholder="Amount in ₹" oninput=pv()><input id=note placeholder="Note (optional)" maxlength=60>
