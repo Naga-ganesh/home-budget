@@ -42,7 +42,7 @@ h3.s{margin:22px 0 6px}
 <div id="sheet" hidden onclick="if(event.target===this)closeS()"><div id="sh"></div></div>
 <div id="toast" hidden></div>
 <script>
-const API='PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+const API='https://script.google.com/macros/s/AKfycbwqdOo1P7QUX1YtpcSUDd99dCqQsYVcQp61pV4kQENDshp8D4nAz0hae4iKV_k49tH5/exec';
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const f=n=>'₹'+Number(n).toLocaleString('en-IN');
 let S=Object.assign({tab:'items',items:[],recent:[]},JSON.parse(localStorage.getItem('hb')||'{}'));
