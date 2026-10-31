@@ -29,6 +29,8 @@ nav button.on{color:var(--ink);border-color:var(--ink)}
 .erow{display:grid;grid-template-columns:1fr 84px 76px 36px;gap:6px;align-items:center}.erow input,.erow select{margin:3px 0;padding:10px 8px}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--on);padding:10px 16px;border-radius:99px;z-index:9}
 h3.s{margin:22px 0 6px}
+.panel{padding:16px 0;border-bottom:1px solid var(--rule)}.panel h4{margin:0 0 8px;font:600 16px system-ui}
+.days{display:flex;align-items:flex-end;gap:2px;height:70px;border-bottom:1px solid var(--rule)}.days i{flex:1;background:var(--ink);min-height:2px}
 </style></head><body><main>
 <section id="login" hidden>
   <div class="big" style="margin-top:60px">Home budget</div>
@@ -42,22 +44,27 @@ h3.s{margin:22px 0 6px}
 <div id="sheet" hidden onclick="if(event.target===this)closeS()"><div id="sh"></div></div>
 <div id="toast" hidden></div>
 <script>
-const API='https://script.google.com/macros/s/AKfycbwqdOo1P7QUX1YtpcSUDd99dCqQsYVcQp61pV4kQENDshp8D4nAz0hae4iKV_k49tH5/exec';
+const API='https://script.google.com/macros/s/AKfycbwdIgBOxQmJO7WTDWR-eDlfsChbACRkRvsG-eiHnBJgnVtm6XGLE21ARWhcafRpve9z/exec';
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const f=n=>'₹'+Number(n).toLocaleString('en-IN');
-let S=Object.assign({tab:'items',items:[],recent:[]},JSON.parse(localStorage.getItem('hb')||'{}'));
+let S=Object.assign({tab:'items',items:[],recent:[]},JSON.parse(localStorage.getItem('hbs')||'{}'),JSON.parse(localStorage.getItem('hb')||'{}'));
+let EVQ=[],chain=Promise.resolve(),pend=0;
+const track=d=>EVQ.push({d,t:new Date().toISOString()});
+const queue=fn=>{pend++;const p=chain.then(fn);chain=p.catch(()=>{});return p.finally(()=>{pend--})};
+function resync(){queue(()=>api('state')).then(j=>{if(!pend)upd(j)}).catch(()=>{})}
 async function api(action,d={}){
-  const r=await fetch(API,{method:'POST',body:JSON.stringify({action,token:S.token,...d})});
-  const j=await r.json();
+  const ev=EVQ.splice(0);let j;
+  try{const r=await fetch(API,{method:'POST',keepalive:true,body:JSON.stringify({action,token:S.token,ev,...d})});j=await r.json()}catch(e){EVQ.unshift(...ev);throw new Error('Network problem. Try again.')}
   if(j.error==='AUTH'){logout();throw new Error('Session expired. Sign in again.')}
   if(j.error)throw new Error(j.error);return j}
 function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2200)}
-function upd(j){Object.assign(S,{items:j.items,recent:j.recent,month:j.month,role:j.role});draw()}
-async function load(){try{upd(await api('state'))}catch(e){toast(e.message)}}
-async function login(){$('#err').textContent='';try{const j=await api('login',{username:$('#u').value,pin:$('#p').value});
-  Object.assign(S,{token:j.token,user:j.user,role:j.role});localStorage.setItem('hb',JSON.stringify({token:S.token,user:S.user,role:S.role}));await load()}catch(e){$('#err').textContent=e.message}}
-function logout(){localStorage.removeItem('hb');S={tab:'items',items:[],recent:[]};draw()}
-function tab(t){S.tab=t;draw()}
+function upd(j){Object.assign(S,{items:j.items,recent:j.recent,month:j.month,role:j.role,byUser:j.byUser,daily:j.daily,day:j.day,dim:j.dim});snap();draw()}
+function snap(){try{localStorage.setItem('hbs',JSON.stringify({items:S.items,recent:S.recent,month:S.month,byUser:S.byUser,daily:S.daily,day:S.day,dim:S.dim}))}catch(e){}}
+async function load(open){try{upd(await api('state',{open}))}catch(e){toast(e.message)}}
+async function login(){$('#err').textContent='';const b=$('#login button');b.disabled=true;b.textContent='Signing in…';try{const j=await api('login',{username:$('#u').value,pin:$('#p').value});
+  Object.assign(S,{token:j.token,user:j.user,role:j.role});localStorage.setItem('hb',JSON.stringify({token:S.token,user:S.user,role:S.role}));upd(j)}catch(e){$('#err').textContent=e.message}finally{b.disabled=false;b.textContent='Sign in'}}
+function logout(){localStorage.removeItem('hb');localStorage.removeItem('hbs');S={tab:'items',items:[],recent:[]};draw()}
+function tab(t){S.tab=t;track(t);draw()}
 function draw(){
   if(!S.token){$('#login').hidden=false;$('#app').hidden=true;return}
   $('#login').hidden=true;$('#app').hidden=false;
@@ -66,25 +73,45 @@ function draw(){
   $('#top').innerHTML=`<div class=row><span class=mut>${esc(S.user)} · ${S.month||''}</span><button class=ghost onclick=logout()>Log out</button></div>
   <div class=big>${f(tot-sp)} <small>left of ${f(tot)}</small></div>
   <div class=pills><span>GPay ${f(left('GPay'))}</span><span>Cash ${f(left('Cash'))}</span></div>`;
-  $('#tabs').innerHTML=['items','recent',...(S.role==='admin'?['admin']:[])].map(t=>`<button class="${S.tab===t?'on':''}" onclick="tab('${t}')">${t}</button>`).join('');
-  ({items:vItems,recent:vRecent,admin:vAdmin})[S.tab]()}
+  $('#tabs').innerHTML=['items','dashboard','recent',...(S.role==='admin'?['admin']:[])].map(t=>`<button class="${S.tab===t?'on':''}" onclick="tab('${t}')">${t}</button>`).join('');
+  ({items:vItems,dashboard:vDash,recent:vRecent,admin:vAdmin})[S.tab]()}
+function vDash(){
+  const I=S.items,tot=I.reduce((a,i)=>a+i.budget,0),sp=I.reduce((a,i)=>a+i.spent,0),day=S.day||1,dim=S.dim||30;
+  const rem=Math.max(1,dim-day+1),per=Math.round(Math.max(0,tot-sp)/rem),proj=Math.round(sp/day*dim),ahead=tot&&sp/tot>day/dim+.05;
+  const md=m=>{const x=I.filter(i=>i.mode===m);return[x.reduce((a,i)=>a+i.spent,0),x.reduce((a,i)=>a+i.budget,0)]};
+  const bar=(s,b)=>`<div class=bar><i class="${s>b?'bad':''}" style="width:${b?Math.min(100,s/b*100):0}%"></i></div><div style="height:10px"></div>`;
+  const watch=I.filter(i=>i.budget&&i.spent/i.budget>=.8).sort((a,b)=>b.spent/b.budget-a.spent/a.budget).slice(0,5);
+  const dl=S.daily||{},mx=Math.max(0,...Object.values(dl)),us=Object.entries(S.byUser||{}).sort((a,b)=>b[1]-a[1]);
+  $('#view').innerHTML=`<div class=panel><h4>Month pace</h4><div class=row><span>Day ${day} of ${dim}</span><span class="${ahead?'bad':''}">${ahead?'Spending ahead of pace':'On track'}</span></div>
+  <div class=mut>Spent ${f(sp)} of ${f(tot)}. At this rate the month ends near ${f(proj)}.</div>
+  <div class=big style="font-size:28px;margin:10px 0 0">${f(per)} <small>a day for the next ${rem} days</small></div></div>
+  <div class=panel><h4>Cash and GPay</h4>${['Cash','GPay'].map(m=>{const[s,b]=md(m);return `<div class=row><span>${m}</span><span class=mut>${f(s)} of ${f(b)}</span></div>${bar(s,b)}`}).join('')}</div>
+  <div class=panel><h4>Running low</h4>${watch.map(i=>{const l=i.budget-i.spent;return `<div class=row style="padding:3px 0"><span>${esc(i.item)}</span><span class="${l<0?'bad':''}">${l<0?'over by '+f(-l):f(l)+' left'}</span></div>`}).join('')||'<span class=mut>No item is near its limit.</span>'}</div>
+  <div class=panel><h4>Daily spending</h4><div class=days>${Array.from({length:day},(_,k)=>{const v=dl[k+1]||0;return `<i style="height:${mx?v/mx*100:0}%"></i>`}).join('')}</div><div class="row mut"><span>Day 1</span><span>Highest day ${f(mx)}</span><span>Day ${day}</span></div></div>
+  <div class=panel><h4>Who spent what</h4>${us.map(([u,v])=>`<div class=row><span>${esc(u)}</span><span class=mut>${f(v)}${sp?' ('+Math.round(v/sp*100)+'%)':''}</span></div>${bar(v,sp)}`).join('')||'<span class=mut>No spending yet this month.</span>'}</div>`}
 function vItems(){$('#view').innerHTML=S.items.map((i,x)=>{const l=i.budget-i.spent,p=Math.min(100,i.budget?i.spent/i.budget*100:0);
   return `<div class=it onclick="pick(${x})"><div class=row><span class=name>${esc(i.item)}<span class=tag>${i.mode}</span></span><span class="left ${l<0?'bad':''}">${f(l)}</span></div>
   <div class="row mut"><span>${f(i.spent)} of ${f(i.budget)}</span><span>${l<0?'over budget':'left'}</span></div><div class=bar><i class="${l<0?'bad':''}" style="width:${p}%"></i></div></div>`}).join('')}
 function pick(x){const i=S.sel=S.items[x];$('#sheet').hidden=false;
   $('#sh').innerHTML=`<h3>${esc(i.item)}</h3><div class=mut>${f(i.budget-i.spent)} left</div>
   <input id=amt type=number inputmode=decimal placeholder="Amount in ₹" oninput=pv()><input id=note placeholder="Note (optional)" maxlength=60>
+  <div class=mut style="margin-top:6px">Date (change only for a missed entry)</div><input id=dt type=date value="${new Date().toLocaleDateString('en-CA')}" max="${new Date().toLocaleDateString('en-CA')}">
   <div id=pvw class=mut>&nbsp;</div><div class=row><button class=ghost onclick=closeS()>Cancel</button><button id=addb onclick=addExp()>Add expense</button></div>`;$('#amt').focus()}
 function pv(){const a=+$('#amt').value||0;$('#pvw').textContent=a?'Left after this: '+f(S.sel.budget-S.sel.spent-a):'\u00a0'}
 function closeS(){$('#sheet').hidden=true}
-async function addExp(){const a=+$('#amt').value;if(!(a>0))return toast('Enter an amount');$('#addb').disabled=true;
-  try{upd(await api('add',{item:S.sel.item,amount:a,note:$('#note').value}));closeS();toast('Expense added')}catch(e){toast(e.message);$('#addb').disabled=false}}
+async function addExp(){const a=+$('#amt').value;if(!(a>0))return toast('Enter an amount');const d=$('#dt').value,it=S.sel,note=$('#note').value,cur=!d||d.slice(0,7)===S.month;
+  if(cur){it.spent+=a;S.recent.unshift({id:'tmp',item:it.item,amount:a,user:S.user,time:'just now',note});S.daily=S.daily||{};S.daily[S.day]=(S.daily[S.day]||0)+a;S.byUser=S.byUser||{};S.byUser[S.user]=(S.byUser[S.user]||0)+a}
+  closeS();draw();toast(cur?'Expense added':'Saved under '+d.slice(0,7)+', not this month');
+  queue(()=>api('add',{item:it.item,amount:a,note,date:d})).then(j=>{if(!pend)upd(j)}).catch(e=>{toast(e.message);resync()})}
 function vRecent(){$('#view').innerHTML=S.recent.map(r=>`<div class=it style="cursor:default"><div class=row><b>${esc(r.item)}</b><b>${f(r.amount)}</b></div>
   <div class=row><span class=mut>${esc(r.user)} · ${esc(r.time)}${r.note?' · '+esc(r.note):''}</span>${r.user===S.user||S.role==='admin'?`<button class=ghost onclick="del('${r.id}')">Delete</button>`:''}</div></div>`).join('')||'<p class=mut>No expenses yet this month.</p>'}
-async function del(id){if(!confirm('Delete this expense?'))return;try{upd(await api('del',{id}))}catch(e){toast(e.message)}}
+async function del(id){if(id==='tmp')return toast('Still saving, try again in a moment');if(!confirm('Delete this expense?'))return;
+  const r=S.recent.find(x=>x.id===id);
+  if(r){S.recent=S.recent.filter(x=>x!==r);const it=S.items.find(i=>i.item===r.item);if(it)it.spent-=r.amount;draw()}
+  queue(()=>api('del',{id})).then(j=>{if(!pend)upd(j)}).catch(e=>{toast(e.message);resync()})}
 async function vAdmin(){
   S.draft=S.draft||S.items.map(i=>({item:i.item,budget:i.budget,mode:i.mode}));
-  let us=[];try{us=(await api('users')).users}catch(e){}
+  if(!S.users){try{S.users=(await api('users')).users}catch(e){}}const us=S.users||[];
   const tot=S.draft.reduce((a,d)=>a+(+d.budget||0),0);
   $('#view').innerHTML=`<h3 class=s>Monthly budgets · ${f(tot)}</h3>`+S.draft.map((d,x)=>`<div class=erow><input value="${esc(d.item)}" onchange="S.draft[${x}].item=this.value">
   <input type=number inputmode=numeric value="${d.budget}" onchange="S.draft[${x}].budget=+this.value;vAdmin()"><select onchange="S.draft[${x}].mode=this.value"><option${d.mode=='GPay'?' selected':''}>GPay<option${d.mode=='Cash'?' selected':''}>Cash</select>
@@ -94,7 +121,9 @@ async function vAdmin(){
   `<div class=erow style="grid-template-columns:1fr 80px 90px"><input id=nu placeholder="New username"><input id=np inputmode=numeric placeholder="PIN"><select id=nr><option>member<option>admin</select></div><button onclick=addU() style="width:100%;margin-top:6px">Add user</button>`}
 async function saveB(){try{await api('saveBudgets',{items:S.draft});S.draft=null;await load();toast('Budgets saved')}catch(e){toast(e.message)}}
 async function setU(u,role){const pin=prompt('New PIN (4-6 digits) for '+u);if(!pin)return;try{await api('setUser',{username:u,pin,role});toast('PIN updated')}catch(e){toast(e.message)}}
-async function addU(){try{await api('setUser',{username:$('#nu').value,pin:$('#np').value,role:$('#nr').value});vAdmin()}catch(e){toast(e.message)}}
-async function rmU(u){if(!confirm('Remove '+u+'?'))return;try{await api('delUser',{username:u});vAdmin()}catch(e){toast(e.message)}}
-draw();if(S.token)load();
+async function addU(){try{await api('setUser',{username:$('#nu').value,pin:$('#np').value,role:$('#nr').value});S.users=null;vAdmin()}catch(e){toast(e.message)}}
+async function rmU(u){if(!confirm('Remove '+u+'?'))return;try{await api('delUser',{username:u});S.users=null;vAdmin()}catch(e){toast(e.message)}}
+draw();if(S.token){track('items');load(true)}
+const flush=()=>{if(EVQ.length&&S.token&&!pend)api('ping').catch(()=>{})};
+setInterval(flush,20000);document.addEventListener('visibilitychange',()=>{if(document.hidden)flush()});
 </script></body></html>
