@@ -33,6 +33,11 @@ h3.s{margin:22px 0 6px}
 .days{display:flex;align-items:flex-end;gap:2px;height:70px;border-bottom:1px solid var(--rule)}.days i{flex:1;background:var(--ink);min-height:2px}
 .hd{display:flex;justify-content:space-between;width:100%;background:none;color:var(--tx);border-radius:0;border-bottom:1px solid var(--rule);padding:14px 0;text-align:left}
 .ent{padding:8px 0 8px 18px;border-bottom:1px solid var(--rule)}.ent .row{margin-bottom:2px}
+.it.over{border-left:3px solid var(--bad);padding-left:10px;background:rgba(214,64,32,.09)}
+.flag{font-size:12px;font-weight:600;color:var(--on);background:var(--bad);border-radius:4px;padding:0 6px;margin-left:8px}
+.days i.bad{background:var(--bad)}.bl{position:absolute;left:0;right:0;border-top:2px dashed var(--mut);z-index:1;pointer-events:none}
+.mlab{display:flex;gap:2px;font-size:11px;text-align:center;margin-top:3px}.mlab span{flex:1}.ok{color:var(--ok)}
+.track{position:relative;height:10px;background:var(--rule);border-radius:2px;margin-top:4px}.track i{display:block;height:100%;background:var(--ink);border-radius:2px}.track i.bad{background:var(--bad)}.track b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--tx)}
 </style></head><body><main>
 <section id="login" hidden>
   <div class="big" style="margin-top:60px">Home budget</div>
@@ -78,6 +83,7 @@ function draw(){
   $('#tabs').innerHTML=['items','dashboard','recent',...(S.role==='admin'?['admin']:[])].map(t=>`<button class="${S.tab===t?'on':''}" onclick="tab('${t}')">${t}</button>`).join('');
   ({items:vItems,dashboard:vDash,recent:vRecent,admin:vAdmin})[S.tab]()}
 const lab=k=>new Date(k+'-01T12:00:00').toLocaleDateString('en-IN',{month:'short',year:'numeric'});
+const lab3=k=>new Date(k+'-01T12:00:00').toLocaleDateString('en-IN',{month:'short'});
 function pickM(k){S.dm=k;vDash()}
 function dmGo(d){const ms=S.months||[],j=ms.indexOf(S.dm||S.month)+d;if(j>=0&&j<ms.length)pickM(ms[j])}
 async function vDash(){
@@ -90,20 +96,23 @@ async function vDash(){
   const md=k=>{const x=I.filter(i=>i.mode===k);return[x.reduce((a,i)=>a+i.spent,0),x.reduce((a,i)=>a+i.budget,0)]};
   const bar=(s,b)=>`<div class=bar><i class="${s>b?'bad':''}" style="width:${b?Math.min(100,s/b*100):0}%"></i></div><div style="height:10px"></div>`;
   const watch=I.filter(i=>i.budget&&i.spent/i.budget>=.8).sort((a,b)=>b.spent/b.budget-a.spent/a.budget).slice(0,5);
-  const dl=R.daily||{},mx=Math.max(0,...Object.values(dl)),us=Object.entries(R.byUser||{}).sort((a,b)=>b[1]-a[1]),mx2=Math.max(1,...ms.map(x=>x.total));
+  const dl=R.daily||{},mx=Math.max(0,...Object.values(dl)),us=Object.entries(R.byUser||{}).sort((a,b)=>b[1]-a[1]),mx2=Math.max(1,...ms.map(x=>Math.max(x.total,x.budget))),itm=I.filter(i=>i.budget>0).map(i=>({...i,pct:i.spent/i.budget*100})).sort((a,b)=>b.pct-a.pct),sc=Math.max(100,...itm.map(i=>i.pct));
   $('#view').innerHTML=`<div class=row style="margin:10px 0"><button class=ghost onclick="dmGo(-1)">‹</button><select id=dm onchange="pickM(this.value)" style="margin:0">${ms.slice().reverse().map(x=>`<option value="${x.m}"${x.m===m?' selected':''}>${lab(x.m)}</option>`).join('')}</select><button class=ghost onclick="dmGo(1)">›</button></div>
-  <div class=panel><h4>Month by month</h4><div class=days style="height:90px">${ms.map(x=>`<i title="${lab(x.m)}: ${f(x.total)}" onclick="pickM('${x.m}')" style="height:${x.total/mx2*100}%;opacity:${x.m===m?1:.4};cursor:pointer"></i>`).join('')}</div>
-  <div class="row mut"><span>${lab(ms[0].m)}</span><span>${lab(m)}: ${f(sp)}</span><span>${lab(ms[ms.length-1].m)}</span></div></div>
+  <div class=panel><h4>Month by month</h4>
+  <div style="position:relative;height:100px"><div class=bl style="bottom:${ms[ms.length-1].budget/mx2*100}%"></div><div class=days style="height:100%">${ms.map(x=>`<i class="${x.total>x.budget?'bad':''}" title="${lab(x.m)}: ${f(x.total)}" onclick="pickM('${x.m}')" style="height:${x.total/mx2*100}%;opacity:${x.m===m?1:.5};cursor:pointer"></i>`).join('')}</div></div>
+  <div class=mlab>${ms.map(x=>`<span>${lab3(x.m)}</span>`).join('')}</div><div class=mlab>${ms.map(x=>`<span class="${x.over?'bad':'ok'}">${x.over||'✓'}</span>`).join('')}</div>
+  <div class=mut style="font-size:13px;margin-top:6px">Dashed line is the total budget. A red bar means that month overspent. The number below is how many items went over (✓ means none).</div></div>
+  <div class=panel><h4>Items against budget, ${lab(m)}</h4>${itm.map(i=>{const o=i.spent>i.budget;return `<div style="padding:5px 0"><div class=row><span>${esc(i.item)}${o?'<span class=flag>Over</span>':''}</span><span class="${o?'bad':'mut'}">${f(i.spent)} / ${f(i.budget)} (${Math.round(i.pct)}%)</span></div><div class=track><i class="${o?'bad':''}" style="width:${i.pct/sc*100}%"></i><b style="left:${100/sc*100}%"></b></div></div>`}).join('')||'<span class=mut>No items.</span>'}
+  <div class=mut style="font-size:13px;margin-top:6px">The vertical line marks 100% of each item's budget. Bars that pass it are overspent.</div></div>
   ${R.cur?`<div class=panel><h4>Month pace</h4><div class=row><span>Day ${day} of ${dim}</span><span class="${ahead?'bad':''}">${ahead?'Spending ahead of pace':'On track'}</span></div>
   <div class=mut>Spent ${f(sp)} of ${f(tot)}. At this rate the month ends near ${f(proj)}.</div>
   <div class=big style="font-size:28px;margin:10px 0 0">${f(per)} <small>a day for the next ${rem} days</small></div></div>`
   :`<div class=panel><h4>${lab(m)} summary</h4><div class=big style="font-size:28px;margin:6px 0">${f(sp)} <small>of ${f(tot)} budget</small></div><div class="${sp>tot?'bad':'mut'}">${sp>tot?'Over budget by '+f(sp-tot):f(tot-sp)+' under budget'}</div></div>`}
-  <div class=panel><h4>Cash and GPay</h4>${['Cash','GPay'].map(k=>{const[s,b]=md(k);return `<div class=row><span>${k}</span><span class=mut>${f(s)} of ${f(b)}</span></div>${bar(s,b)}`}).join('')}</div>
-  <div class=panel><h4>${R.cur?'Running low':'Items near or over limit'}</h4>${watch.map(i=>{const l=i.budget-i.spent;return `<div class=row style="padding:3px 0"><span>${esc(i.item)}</span><span class="${l<0?'bad':''}">${l<0?'over by '+f(-l):f(l)+' left'}</span></div>`}).join('')||'<span class=mut>No item is near its limit.</span>'}</div>
+  <div class=panel><h4>Cash and GPay</h4>${['Cash','GPay'].map(k=>{const[s,b]=md(k);return `<div class=row><span>${k}</span><span class=mut>${f(s)} of ${f(b)} (${b?Math.round(s/b*100):0}%)</span></div>${bar(s,b)}`}).join('')}</div>
   <div class=panel><h4>Daily spending</h4><div class=days>${Array.from({length:day},(_,k)=>{const v=dl[k+1]||0;return `<i style="height:${mx?v/mx*100:0}%"></i>`}).join('')}</div><div class="row mut"><span>Day 1</span><span>Highest day ${f(mx)}</span><span>Day ${day}</span></div></div>
   <div class=panel><h4>Who spent what</h4>${us.map(([u,v])=>`<div class=row><span>${esc(u)}</span><span class=mut>${f(v)}${sp?' ('+Math.round(v/sp*100)+'%)':''}</span></div>${bar(v,sp)}`).join('')||'<span class=mut>No spending this month.</span>'}</div>`}
 function vItems(){$('#view').innerHTML=S.items.map((i,x)=>{const l=i.budget-i.spent,p=Math.min(100,i.budget?i.spent/i.budget*100:0),u=i.budget?Math.round(i.spent/i.budget*100):0,pc=i.spent>0&&u===0?'&lt;1':u;
-  return `<div class=it onclick="pick(${x})"><div class=row><span class=name>${esc(i.item)}<span class=tag>${i.mode}</span></span><span class="left ${l<0?'bad':''}">${f(l)}</span></div>
+  return `<div class="it${l<0?' over':''}" onclick="pick(${x})"><div class=row><span class=name>${esc(i.item)}<span class=tag>${i.mode}</span>${l<0?'<span class=flag>Over budget</span>':''}</span><span class="left ${l<0?'bad':''}">${f(Math.abs(l))}</span></div>
   <div class="row mut"><span>${f(i.spent)} of ${f(i.budget)} (${pc}%)</span><span>${l<0?'over budget':'left'}</span></div><div class=bar><i class="${l<0?'bad':''}" style="width:${p}%"></i></div></div>`}).join('')}
 function pick(x){const i=S.sel=S.items[x];$('#sheet').hidden=false;
   $('#sh').innerHTML=`<h3>${esc(i.item)}</h3><div class=mut>${f(i.budget-i.spent)} left</div>
@@ -116,13 +125,21 @@ async function addExp(){const a=+$('#amt').value;if(!(a>0))return toast('Enter a
   if(cur){it.spent+=a;S.recent.unshift({id:'tmp',item:it.item,amount:a,user:S.user,time:'just now',note});S.daily=S.daily||{};S.daily[S.day]=(S.daily[S.day]||0)+a;S.byUser=S.byUser||{};S.byUser[S.user]=(S.byUser[S.user]||0)+a}
   closeS();draw();toast(cur?'Expense added':'Saved under '+d.slice(0,7)+', not this month');
   queue(()=>api('add',{item:it.item,amount:a,note,date:d})).then(j=>{if(!pend)upd(j)}).catch(e=>{toast(e.message);resync()})}
+const tk=r=>{const d=parseInt(r.time),m=/(\d\d):(\d\d)$/.exec(r.time);return isNaN(d)?1e9:d*1440+(m?+m[1]*60+ +m[2]:720)};
+const SORTS={new:'Newest first',old:'Oldest first',cat:'Category A to Z',lo:'Amount: low to high',hi:'Amount: high to low'};
 function vRecent(){
-  const g={};S.recent.forEach(r=>(g[r.item]=g[r.item]||[]).push(r));
-  S.gk=Object.keys(g);S.open=S.open||{};
-  $('#view').innerHTML=S.gk.map((k,x)=>{const L=g[k],o=S.open[k],t=L.reduce((a,r)=>a+r.amount,0);
-    return `<button class=hd aria-expanded="${!!o}" onclick="tog(${x})"><span>${o?'▾':'▸'} ${esc(k)}</span><span class=mut>${f(t)} · ${L.length}</span></button>`+
-    (o?L.map(r=>`<div class=ent><div class=row><b>${f(r.amount)}</b>${r.user===S.user||S.role==='admin'?`<button class=ghost onclick="del('${r.id}')">Delete</button>`:''}</div><div class=mut>${esc(r.user)} · ${esc(r.time)}${r.note?' · '+esc(r.note):''}</div></div>`).join(''):'')}).join('')||'<p class=mut>No expenses yet this month.</p>'}
+  const so=S.sort||'new',g={};
+  S.recent.map((r,i)=>({...r,_i:i})).forEach(r=>(g[r.item]=g[r.item]||[]).push(r));
+  const ec={new:(a,b)=>tk(b)-tk(a)||a._i-b._i,old:(a,b)=>tk(a)-tk(b)||b._i-a._i,cat:(a,b)=>tk(b)-tk(a)||a._i-b._i,lo:(a,b)=>a.amount-b.amount||a._i-b._i,hi:(a,b)=>b.amount-a.amount||a._i-b._i}[so];
+  const G=Object.keys(g).map(k=>{const L=g[k].sort(ec);return{k,L,t:L.reduce((a,r)=>a+r.amount,0)}});
+  G.sort({new:(a,b)=>tk(b.L[0])-tk(a.L[0]),old:(a,b)=>tk(a.L[0])-tk(b.L[0]),cat:(a,b)=>a.k.localeCompare(b.k),lo:(a,b)=>a.t-b.t,hi:(a,b)=>b.t-a.t}[so]);
+  S.gk=G.map(x=>x.k);S.open=S.open||{};const all=G.length&&G.every(x=>S.open[x.k]);
+  $('#view').innerHTML=`<div class=row style="gap:8px;margin:10px 0"><select onchange="S.sort=this.value;vRecent()" style="margin:0" aria-label="Sort by">${Object.entries(SORTS).map(([v,t])=>`<option value="${v}"${v===so?' selected':''}>${t}</option>`).join('')}</select><button class=ghost onclick="allOpen()" style="white-space:nowrap">${all?'Collapse all':'Expand all'}</button></div>`+
+  G.map((x,n)=>{const o=S.open[x.k],it=S.items.find(i=>i.item===x.k),over=it&&it.spent>it.budget;
+    return `<button class=hd aria-expanded="${!!o}" onclick="tog(${n})"><span>${o?'▾':'▸'} ${esc(x.k)}${over?'<span class=flag>Over</span>':''}</span><span class="${over?'bad':'mut'}">${f(x.t)} · ${x.L.length}</span></button>`+
+    (o?x.L.map(r=>`<div class=ent><div class=row><b>${f(r.amount)}</b>${r.user===S.user||S.role==='admin'?`<button class=ghost onclick="del('${r.id}')">Delete</button>`:''}</div><div class=mut>${esc(r.user)} · ${esc(r.time)}${r.note?' · '+esc(r.note):''}</div></div>`).join(''):'')}).join('')||'<p class=mut>No expenses yet this month.</p>'}
 function tog(x){const k=S.gk[x];S.open[k]=!S.open[k];vRecent()}
+function allOpen(){const a=S.gk.every(k=>S.open[k]);S.gk.forEach(k=>S.open[k]=!a);vRecent()}
 async function del(id){if(id==='tmp')return toast('Still saving, try again in a moment');if(!confirm('Delete this expense?'))return;
   const r=S.recent.find(x=>x.id===id);
   if(r){S.recent=S.recent.filter(x=>x!==r);const it=S.items.find(i=>i.item===r.item);if(it)it.spent-=r.amount;draw()}
